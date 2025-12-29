@@ -7,7 +7,7 @@ try
     [ldpc_encoded, numBlocks_ldpc] = encodeLDPCBlocks(interleaved, numel(interleaved), config);
 
     R_total = config.R_bch * config.R_ldpc;
-    rx_bits = transmitQPSK(ldpc_encoded, EbN0dB, R_total);
+    rx_bits = transmit16QAM(ldpc_encoded, EbN0dB, R_total);
 
     ldpc_decoded = decodeLDPCHard(rx_bits, numBlocks_ldpc, numel(interleaved), config);
     deinterleaved = applyDeinterleaver(ldpc_decoded, numel(bch_encoded), config);

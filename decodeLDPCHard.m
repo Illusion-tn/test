@@ -16,8 +16,9 @@ else
     end
 end
 
-% Lay phan message bits (K) o dau vector codeword (phu hop voi ldpcEncode() systematic)
-decoded = decoded_mat(1:config.k_ldpc, :);
+% Lay phan message bits theo MessageIndices (an toan hon so voi gia dinh systematic 1:K)
+msgIdx = config.msgIdx;
+decoded = decoded_mat(msgIdx, :);
 decoded = decoded(:);
 decoded = decoded(1:original_length);
 end

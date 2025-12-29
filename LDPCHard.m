@@ -6,8 +6,8 @@ try
     % Padding va encoding
     [ldpc_encoded, numBlocks] = encodeLDPCBlocks(data_bits, original_length, config);
     
-    % BPSK + AWGN
-    [rx_bits, ~] = transmitQPSK(ldpc_encoded, EbN0dB, config.R_ldpc);
+    % 16QAM + AWGN
+    [rx_bits, ~] = transmit16QAM(ldpc_encoded, EbN0dB, config.R_ldpc);
     
     % LDPC Decoding (parallel)
     decoded_bits = decodeLDPCHard(rx_bits, numBlocks, original_length, config);

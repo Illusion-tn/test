@@ -41,3 +41,4 @@ xlim([min(SNR) max(SNR)]);
 
 saveas(gcf, 'BER_Comparison_HardDecision.png');
 fprintf('\nDo thi da luu: BER_Comparison_HardDecision.png\n');
+end

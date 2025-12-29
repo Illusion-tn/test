@@ -6,8 +6,8 @@ try
     % Padding va encoding
     [bch_encoded, numBlocks] = encodeBCHBlocks(data_bits, original_length, config);
     
-    % BPSK + AWGN
-    [rx_bits, ~] = transmitQPSK(bch_encoded, EbN0dB, config.R_bch);
+    % 16QAM + AWGN
+    [rx_bits, ~] = transmit16QAM(bch_encoded, EbN0dB, config.R_bch);
     
     % BCH Decoding
     decoded_bits = decodeBCHBlocks(rx_bits, numBlocks, original_length, config);

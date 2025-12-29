@@ -1,7 +1,9 @@
-clear; clc; close all;
+clear; 
+clc; 
+close all;
 
 % Khoi tao he thong
-config = system();
+config = SystemConfig();  % ĐÃ SỬA: từ system() sang SystemConfig()
 
 % SNR sweep (Eb/N0 dB)
 config.SNR = 0:0.5:11;
@@ -18,19 +20,21 @@ BER_combined = NaN(1, numel(config.SNR));
 for si = 1:numel(config.SNR)
     EbN0dB = config.SNR(si);
     fprintf('\n===== Eb/N0 = %.1f dB (%d/%d) =====\n', EbN0dB, si, numel(config.SNR));
-
+    
     % 1) BCH only
     BER_bch(si) = BCH(data_bits, original_length, EbN0dB, config);
-
+    
     % 2) LDPC only (hard)
     BER_ldpc(si) = LDPCHard(data_bits, original_length, EbN0dB, config);
-
+    
     % 3) BCH + Interleaver + LDPC
     BER_combined(si) = Combined(data_bits, original_length, EbN0dB, config);
 end
 
 % BER ly thuyet (uncoded) - chi de tham khao
-BER_theoretical = 0.5 * erfc(sqrt(10.^(config.SNR/10)));
+EbN0 = 10.^(config.SNR/10);
+% Approx. uncoded Gray 16-QAM BER in AWGN
+BER_theoretical = 0.375 * erfc(sqrt(0.4*EbN0));
 
 % Ve va luu ket qua
 plotResults(config.SNR, BER_theoretical, BER_bch, BER_ldpc, BER_combined, config);

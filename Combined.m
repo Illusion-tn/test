@@ -1,5 +1,5 @@
 function BER = Combined(data_bits, original_length, EbN0dB, config)
-% COMBINED - BCH + Interleaver + LDPC (hard) + QPSK/AWGN
+% COMBINED - BCH + Interleaver + LDPC (hard) + 16QAM/AWGN
 
 fprintf('3) BCH + Interleaver + LDPC (hard)\n');
 
@@ -13,9 +13,9 @@ try
     % 3) LDPC encode
     [ldpc_encoded, numBlocks_ldpc] = encodeLDPCBlocks(interleaved, numel(interleaved), config);
 
-    % 4) QPSK + AWGN
+    % 4) 16QAM + AWGN
     R_total = config.R_bch * config.R_ldpc;
-    rx_bits = transmitQPSK(ldpc_encoded, EbN0dB, R_total);
+    rx_bits = transmit16QAM(ldpc_encoded, EbN0dB, R_total);
 
     % 5) LDPC decode (hard)
     ldpc_decoded = decodeLDPCHard(rx_bits, numBlocks_ldpc, numel(interleaved), config);

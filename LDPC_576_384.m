@@ -1,38 +1,28 @@
-function [H, cfgLDPCEnc] = build_LDPC_576_384(doPlot)
-% BUILD_LDPC_576_384 - Xay dung ma tran QC-LDPC (576, 384)
-%
-% Output:
-%   H         : Ma tran kiem tra (192 x 576) dang sparse
-%   cfgLDPCEnc: Cau hinh cho ldpcEncode()
-%
-% Ghi chu:
-%   - N = 576, K = 384, M = 192, R = 2/3, Z = 48
-%   - H_base: -1 la zero-submatrix; so >=0 la do dich vong (shift)
+function [H, cfgLDPCEnc] = LDPC_576_384(doPlot)
+% LDPC_576_384 - Xay dung ma tran QC-LDPC (576, 384)
 
 if nargin < 1
     doPlot = false;
 end
 
 %% 1) Tham so
-Z   = 48;   % expansion factor
-M_b = 4;    % so hang base
-N_b = 12;   % so cot base
+Z   = 48;
+M_b = 4;
+N_b = 12;
 
-%% 2) Base matrix (4 x 12)
+%% 2) Base matrix với dual-diagonal parity
 H_base = [
-    % 8 cot thong tin (Info)               | 4 cot parity (Parity)
-     3  0 -1  2  0 -1  3  7                 1  0 -1 -1;
-    -1  1  1  3 -1  3 -1  4                -1  0  0 -1;
-     1 -1  7 -1  5  1  8 -1                -1 -1  0  0;
-     0  4 -1  6 -1  4  1 -1                 0 -1 -1  0
+     3  0  2  5  1  4  7  6    0 -1 -1 -1;
+     1  4  6  3  0  7  2  5   -1  0 -1 -1;
+     2  5  1  7  4  0  3  6   -1 -1  0 -1;
+     7  3  4  1  6  5  0  2   -1 -1 -1  0;
 ];
 
 %% 3) Expansion
-M = M_b * Z;
-N = N_b * Z;
+M = M_b * Z;  % 192
+N = N_b * Z;  % 576
 
-H = sparse(M, N);
-I = speye(Z);  % sparse identity
+H = zeros(M, N);
 
 fprintf('Dang xay dung ma tran QC-LDPC (%d x %d), Z=%d ...\n', M, N, Z);
 
@@ -44,30 +34,48 @@ for r = 1:M_b
         if shift_val >= 0
             col_start = (c-1)*Z + 1;
             col_end   = c*Z;
-
-            % circshift(I,[0,s]) => dich phai s cot (tren ma tran don vi)
+            
+            I = eye(Z);
             sub_mat = circshift(I, [0, shift_val]);
             H(row_start:row_end, col_start:col_end) = sub_mat;
         end
     end
 end
 
-%% 4) Tao encoder config
-try
-    cfgLDPCEnc = ldpcEncoderConfig(H);
-    fprintf('>> H hop le cho ldpcEncode(). Code rate ~ %.4f\n', (N - M) / N);
-catch ME
-    warning('Khong tao duoc ldpcEncoderConfig. Kiem tra lai H_base / parity-part.');
-    rethrow(ME);
+H = sparse(logical(H));
+
+fprintf('Ma tran H: %d x %d, density = %.4f\n', size(H,1), size(H,2), nnz(H)/numel(H));
+
+%% 4) Kiểm tra parity part
+K = N - M;  % 384
+H_parity = full(H(:, K+1:end));
+rank_parity = gfrank(H_parity, 2);
+
+fprintf('Kiem tra parity part: rank = %d (can = %d)\n', rank_parity, M);
+
+if rank_parity < M
+    warning('Parity part khong full rank! Thay bang Identity...');
+    H(:, K+1:end) = sparse(logical(speye(M)));
 end
 
-%% 5) Plot (tuy chon)
+%% 5) Tạo config - CHỈ LƯU H, KHÔNG TẠO ldpcEncoderConfig
+% Vì MessageIndices không hoạt động, ta tạo struct đơn giản
+cfgLDPCEnc = struct();
+cfgLDPCEnc.ParityCheckMatrix = H;
+cfgLDPCEnc.MessageIndices = (1:K)';
+cfgLDPCEnc.ParityIndices = (K+1:N)';
+cfgLDPCEnc.NumInformationBits = K;
+cfgLDPCEnc.NumParityBits = M;
+cfgLDPCEnc.BlockLength = N;
+
+fprintf('>> Tao struct config thanh cong: K=%d, N=%d, Rate=%.4f\n', K, N, K/N);
+
+%% 6) Plot
 if doPlot
-    figure;
+    figure('Position', [100 100 1000 600]);
     spy(H);
-    title(sprintf('QC-LDPC Parity-Check Matrix (%d x %d), Z=%d', M, N, Z));
-    xlabel('Cot (bit)');
-    ylabel('Hang (check)');
+    title(sprintf('QC-LDPC H (%d x %d)', M, N));
+    grid on;
 end
 
 end
