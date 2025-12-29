@@ -1,81 +1,82 @@
-function [H, cfgLDPCEnc] = LDPC_576_384(doPlot)
-% LDPC_576_384 - Xay dung ma tran QC-LDPC (576, 384)
+function [H, cfgEnc, msgIdx] = LDPC_576_384()
+%LDPC_576_384 Build a QC-LDPC parity-check matrix for (n,k) = (576,384), Z = 48.
+% [H, CFGEnc, MSGIDX] = LDPC_576_384() constructs a 192x576 sparse logical
+% parity-check matrix H from a 4x12 base matrix (circulant shifts). The parity
+% part is chosen to be triangular with identity blocks to ensure ldpcEncoderConfig
+% can derive a valid encoder configuration.
+%
+% Outputs:
+%   H      - sparse logical parity-check matrix (192x576)
+%   CFGEnc - ldpcEncoderConfig object for H
+%   MSGIDX - indices of message bits within the LDPC codeword (column vector)
+%
+% See also ldpcEncoderConfig, ldpcEncode
 
-if nargin < 1
-    doPlot = false;
-end
+Z = 48;
+Mb = 4;  % 192/48
+Nb = 12; % 576/48
 
-%% 1) Tham so
-Z   = 48;
-M_b = 4;
-N_b = 12;
+% Base matrix Hb (Mb x Nb) with circulant shifts in [0, Z-1], and -1 for zero blocks.
+Hb = -1 * ones(Mb, Nb);
 
-%% 2) Base matrix với dual-diagonal parity
-H_base = [
-     3  0  2  5  1  4  7  6    0 -1 -1 -1;
-     1  4  6  3  0  7  2  5   -1  0 -1 -1;
-     2  5  1  7  4  0  3  6   -1 -1  0 -1;
-     7  3  4  1  6  5  0  2   -1 -1 -1  0;
-];
+% ---- Data part (first 8 block-columns => 384 bits) ----
+Hb(1,1:8) = [ 0,  1,  2, -1,  5,  7, -1, 11];
+Hb(2,1:8) = [ 1, -1,  0,  3,  6, -1,  9, 12];
+Hb(3,1:8) = [-1,  2,  1,  4, -1,  8, 10, -1];
+Hb(4,1:8) = [ 3,  0, -1,  1,  2,  4,  6,  8];
 
-%% 3) Expansion
-M = M_b * Z;  % 192
-N = N_b * Z;  % 576
+% ---- Parity part (last 4 block-columns => 192 parity bits) ----
+Hb(1,  9) = 0;
+Hb(2, 10) = 0;
+Hb(3, 11) = 0;
+Hb(4, 12) = 0;
 
-H = zeros(M, N);
+% Extra connections (below diagonal) to improve decoding robustness
+Hb(2, 9) = 1;
+Hb(3, 10) = 1;
+Hb(4, 11) = 1;
+Hb(3, 9) = 2;
+Hb(4, 10) = 2;
+Hb(4, 9) = 3;
 
-fprintf('Dang xay dung ma tran QC-LDPC (%d x %d), Z=%d ...\n', M, N, Z);
+% Expand Hb into sparse logical H
+M = Mb * Z;
+N = Nb * Z;
 
-for r = 1:M_b
-    row_start = (r-1)*Z + 1;
-    row_end   = r*Z;
-    for c = 1:N_b
-        shift_val = H_base(r, c);
-        if shift_val >= 0
-            col_start = (c-1)*Z + 1;
-            col_end   = c*Z;
-            
-            I = eye(Z);
-            sub_mat = circshift(I, [0, shift_val]);
-            H(row_start:row_end, col_start:col_end) = sub_mat;
+% Pre-allocate indices for ones
+nnz_est = nnz(Hb ~= -1) * Z;
+rows = zeros(nnz_est, 1);
+cols = zeros(nnz_est, 1);
+idx = 1;
+
+for rb = 0:Mb-1
+    r0 = rb * Z;
+    for cb = 0:Nb-1
+        s = Hb(rb+1, cb+1);
+        if s >= 0
+            c0 = cb * Z;
+            ii = (0:Z-1)';
+            rows(idx:idx+Z-1) = r0 + ii + 1;
+            cols(idx:idx+Z-1) = c0 + mod(ii + s, Z) + 1;
+            idx = idx + Z;
         end
     end
 end
 
-H = sparse(logical(H));
+rows = rows(1:idx-1);
+cols = cols(1:idx-1);
+H = sparse(rows, cols, true, M, N);
 
-fprintf('Ma tran H: %d x %d, density = %.4f\n', size(H,1), size(H,2), nnz(H)/numel(H));
+% Create encoder config
+cfgEnc = ldpcEncoderConfig(H);
 
-%% 4) Kiểm tra parity part
-K = N - M;  % 384
-H_parity = full(H(:, K+1:end));
-rank_parity = gfrank(H_parity, 2);
+% FIX: For systematic LDPC codes, message bits are always at positions 1:K
+msgIdx = (1:cfgEnc.NumInformationBits)';
 
-fprintf('Kiem tra parity part: rank = %d (can = %d)\n', rank_parity, M);
-
-if rank_parity < M
-    warning('Parity part khong full rank! Thay bang Identity...');
-    H(:, K+1:end) = sparse(logical(speye(M)));
-end
-
-%% 5) Tạo config - CHỈ LƯU H, KHÔNG TẠO ldpcEncoderConfig
-% Vì MessageIndices không hoạt động, ta tạo struct đơn giản
-cfgLDPCEnc = struct();
-cfgLDPCEnc.ParityCheckMatrix = H;
-cfgLDPCEnc.MessageIndices = (1:K)';
-cfgLDPCEnc.ParityIndices = (K+1:N)';
-cfgLDPCEnc.NumInformationBits = K;
-cfgLDPCEnc.NumParityBits = M;
-cfgLDPCEnc.BlockLength = N;
-
-fprintf('>> Tao struct config thanh cong: K=%d, N=%d, Rate=%.4f\n', K, N, K/N);
-
-%% 6) Plot
-if doPlot
-    figure('Position', [100 100 1000 600]);
-    spy(H);
-    title(sprintf('QC-LDPC H (%d x %d)', M, N));
-    grid on;
+% Verify dimensions
+if cfgEnc.NumInformationBits ~= 384
+    warning('LDPC_576_384:UnexpectedK', ...
+        'Expected K=384, got K=%d', cfgEnc.NumInformationBits);
 end
 
 end

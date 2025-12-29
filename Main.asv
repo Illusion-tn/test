@@ -1,0 +1,60 @@
+clear; clc; close all;
+
+% ===== Parallel ON/OFF =====
+config.USE_PARALLEL = true;
+if config.USE_Parallel && isempty(gcp("nocreate"))
+    try 
+        parpool('local',min(4,feature('numcores')));
+        fprintf('Parallel pool khoi tao thanh cong\n');
+    catch
+        config.USE_Parallel=false;
+        fprintf('khong co Parallel');
+    end
+end
+
+%% Khoi tao he thong
+config = System();
+config.maxIterLDPC = 30;
+config.SNR = 0:0.5:11;
+
+%% Doc du lieu
+[data_bits, original_length] = loadDataFile('Imagine Dragons - Demons.mp4');
+
+%% Khoi tao ket qua
+BER_bch = zeros(1, numel(config.SNR));
+BER_ldpc = zeros(1, numel(config.SNR));
+BER_combined = zeros(1, numel(config.SNR));
+
+%% Vong lap SNR
+fprintf('\n========== BAT DAU MO PHONG ==========\n');
+EbN0dB_list = config.EbN0dB_list;
+BER_bch  = zeros(size(EbN0dB_list));
+BER_ldpc = zeros(size(EbN0dB_list));
+BER_comb = zeros(size(EbN0dB_list));
+
+if config.useParallel
+    % Lưu ý: không fprintf/plot trong parfor (hoặc rất hạn chế)
+    parfor si = 1:numel(EbN0dB_list)
+        EbN0dB = EbN0dB_list(si);
+
+        BER_bch(si)  = BCH(data_bits, original_length, EbN0dB, config);
+        BER_ldpc(si) = LDPCHard(data_bits, original_length, EbN0dB, config);
+        BER_comb(si) = Combined(data_bits, original_length, EbN0dB, config);
+    end
+else
+    for si = 1:numel(EbN0dB_list)
+        EbN0dB = EbN0dB_list(si);
+        BER_bch(si)  = BCH(data_bits, original_length, EbN0dB, config);
+        BER_ldpc(si) = LDPCHard(data_bits, original_length, EbN0dB, config);
+        BER_comb(si) = Combined(data_bits, original_length, EbN0dB, config);
+    end
+end
+
+
+%% BER ly thuyet (16QAM, xap xi Gray-coded, uncoded)
+EbN0 = 10.^(config.SNR/10);
+BER_theoretical = (3/8) * erfc(sqrt(0.4 * EbN0));
+
+%% Ve va luu ket qua
+plotResults(config.SNR, BER_theoretical, BER_bch, BER_ldpc, BER_combined, config);
+fprintf('\n========== HOAN TAT ==========\n');

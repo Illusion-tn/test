@@ -1,5 +1,4 @@
 function deinterleaved = applyDeinterleaver(data, target_length, config)
-% APPLYDEINTERLEAVER - Block de-interleaving
 
 block_size = config.block_size;
 num_blocks = ceil(numel(data) / block_size);

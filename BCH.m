@@ -1,12 +1,12 @@
 function BER = BCH(data_bits, original_length, EbN0dB, config)
-% SIMULATEBCHONLY - Mo phong chi su dung BCH
+
 fprintf('1) BCH (%d,%d)\n', config.n_bch, config.k_bch);
 
 try
     % Padding va encoding
     [bch_encoded, numBlocks] = encodeBCHBlocks(data_bits, original_length, config);
     
-    % 16QAM + AWGN
+    % 16QAM + AWGN (hard-decision)
     [rx_bits, ~] = transmit16QAM(bch_encoded, EbN0dB, config.R_bch);
     
     % BCH Decoding

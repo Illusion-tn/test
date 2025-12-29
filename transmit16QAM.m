@@ -1,57 +1,76 @@
-function [rx_bits, rx_symbols, tx_symbols, pad_len] = transmit16QAM(tx_bits, EbN0_dB, codeRate)
-% TRANSMIT16QAM - Điều chế 16-QAM (Gray) + kênh AWGN
+function [rx_bits, rx_symbols, tx_symbols, pad_len] = transmit16QAM(tx_bits, EbN0dB, codeRate)
+%TRANSMIT16QAM 16-QAM Gray modulation over AWGN with hard-decision demodulation.
+% [RX_BITS, RX_SYMBOLS, TX_SYMBOLS, PAD_LEN] = TRANSMIT16QAM(TX_BITS, EBN0DB, CODERATE)
+% maps TX_BITS to Gray-coded 16-QAM symbols (unit average power), adds AWGN,
+% demodulates with hard decisions, and returns RX_BITS.
+%
 % Inputs:
-%   tx_bits  : Bit đầu vào (0/1)
-%   EbN0_dB  : Eb/N0 (Energy per Bit / Noise Power Spectral Density)
-%   codeRate : Tỷ lệ mã tổng (R_bch * R_ldpc). Mặc định = 1.
+%   TX_BITS  - bit vector (uint8/logical)
+%   EBN0DB   - Eb/N0 in dB
+%   CODERATE - overall code rate R (default 1)
+%
+% Outputs:
+%   RX_BITS    - received bits after hard demod (uint8)
+%   RX_SYMBOLS - received complex symbols
+%   TX_SYMBOLS - transmitted complex symbols
+%   PAD_LEN    - number of zero bits appended
+%
+% See also qammod, qamdemod, awgn
 
-    if nargin < 3 || isempty(codeRate)
-        codeRate = 1;
-    end
+if nargin < 3 || isempty(codeRate)
+    codeRate = 1;
+end
 
-    M = 16;
-    k = 4; % bits per symbol
-    
-    % --- 1. PADDING & MAPPING ---
-    tx_bits = uint8(tx_bits(:));
-    num_bits = numel(tx_bits);
-    
-    % Pad để chia hết cho 4 (16-QAM)
-    pad_len = mod(k - mod(num_bits, k), k);
-    if pad_len == k, pad_len = 0; end
-    
-    tx_bits_padded = [tx_bits; zeros(pad_len, 1, 'uint8')];
-    
-    % Dùng hàm chuẩn của Matlab (nhanh và chính xác hơn thủ công)
-    % InputType='bit', UnitAveragePower=true (Es=1)
-    tx_symbols = qammod(tx_bits_padded, M, 'InputType', 'bit', ...
-        'UnitAveragePower', true, 'PlotConstellation', false);
+% Handle empty input
+if isempty(tx_bits)
+    rx_bits = uint8([]);
+    rx_symbols = [];
+    tx_symbols = [];
+    pad_len = 0;
+    return;
+end
 
-    % --- 2. TÍNH TOÁN NHIỄU (CRITICAL) ---
-    % Công thức: Es/N0 = (Eb/N0) + 10*log10(k * R)
-    EsN0_dB = EbN0_dB + 10*log10(k * codeRate);
-    
-    % Chuyển sang tuyến tính: Es/N0 = 10^(EsN0_dB/10)
-    EsN0_lin = 10.^(EsN0_dB / 10);
-    
-    % Vì UnitAveragePower=true => Es = 1.
-    % N0 = Es / EsN0_lin = 1 / EsN0_lin
-    % Phương sai nhiễu (Noise Variance) cho mỗi chiều (I và Q):
-    % sigma^2 = N0 / 2
-    noiseVar = 1 ./ (2 * EsN0_lin);
-    
-    % Tạo nhiễu phức
-    noise = sqrt(noiseVar) .* (randn(size(tx_symbols)) + 1i*randn(size(tx_symbols)));
-    
-    % Tín hiệu thu
-    rx_symbols = tx_symbols + noise;
+% Ensure column vector of uint8
+tx_bits = uint8(tx_bits(:));
 
-    % --- 3. DEMODULATION (HARD DECISION) ---
-    % 'OutputType'='bit' trả về bit 0/1
-    rx_bits_padded = qamdemod(rx_symbols, M, 'OutputType', 'bit', ...
-        'UnitAveragePower', true);
-    
-    % Cắt bỏ padding
-    rx_bits = rx_bits_padded(1:num_bits);
-    rx_bits = uint8(rx_bits);
+M = 16;
+k = 4; % bits per symbol
+
+% Pad to multiple of k
+pad_len = mod(k - mod(numel(tx_bits), k), k);
+if pad_len ~= 0
+    tx_bits = [tx_bits; zeros(pad_len, 1, 'uint8')];
+end
+
+% Modulation: qammod expects column vector when InputType='bit'
+try
+    tx_symbols = qammod(tx_bits, M, 'InputType', 'bit', 'UnitAveragePower', true);
+catch ME
+    % Fallback for older MATLAB versions
+    Ns = numel(tx_bits) / k;
+    bits_mat = reshape(tx_bits, k, Ns).';
+    tx_symbols = qammod(bits_mat, M, 'gray', 'InputType', 'bit');
+    tx_symbols = tx_symbols / sqrt(mean(abs(tx_symbols).^2));
+end
+
+% Eb/N0 -> Es/N0 conversion
+EsN0dB = EbN0dB + 10*log10(k * double(codeRate));
+
+% Add AWGN
+rx_symbols = awgn(tx_symbols, EsN0dB, 'measured');
+
+% Hard decision demodulation
+try
+    rx_bits = qamdemod(rx_symbols, M, 'OutputType', 'bit', 'UnitAveragePower', true);
+catch ME
+    rx_bits_mat = qamdemod(rx_symbols, M, 'gray', 'OutputType', 'bit');
+    rx_bits = rx_bits_mat(:);
+end
+
+% Convert to uint8 and remove padding
+rx_bits = uint8(rx_bits);
+if pad_len ~= 0
+    rx_bits = rx_bits(1:end-pad_len);
+end
+
 end

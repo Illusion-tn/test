@@ -1,43 +1,30 @@
 function c_hat = ldpc_bitflip_decode(c_init, H, degCol, maxIter)
-% LDPC_BITFLIP_DECODE - Parallel Bit-Flipping Algorithm (hard-decision)
-%
-% Inputs:
-%   c_init : (N x 1) uint8/logic - codeword nhan (hard bits)
-%   H      : (M x N) sparse parity-check matrix
-%   degCol : scalar hoac vector (N x 1) - bac cot
-%   maxIter: so vong lap toi da
+%LDPC_BITFLIP_DECODE Decode an LDPC codeword using parallel bit-flipping.
+% C_HAT = LDPC_BITFLIP_DECODE(C_INIT, H, DEGCOL, MAXITER) performs iterative
+% hard-decision decoding.
 
 c_hat = uint8(c_init(:));
 
-% Cho phep degCol la scalar hoac vector
-if isscalar(degCol)
-    degColVec = double(degCol) * ones(size(c_hat));
-else
-    degColVec = double(degCol(:));
-    if numel(degColVec) ~= numel(c_hat)
-        error('degCol phai la scalar hoac vector do dai N.');
-    end
-end
-
 for it = 1:maxIter
-    % Syndrome: s = H*c mod2
+    % Tinh syndrome
     s_chk = mod(H * double(c_hat), 2);
-
-    % Neu syndrome = 0 => hop le
+    
+    % Early stop neu syndrome = 0
     if ~any(s_chk)
         break;
     end
-
-    % Dem so check bi vi pham cho moi bit: cnt = H' * s
-    cnt = full(H' * s_chk);  % (N x 1)
-
-    % Lat bit neu so vi pham > degCol/2
-    flip = cnt > (degColVec / 2);
-
+    
+    % Dem so check vi pham
+    cnt = full(H' * s_chk);
+    
+    % Flip bits
+    flip = cnt > (degCol / 2);
+    
     if ~any(flip)
         break;
     end
-
-    c_hat(flip) = bitxor(c_hat(flip), uint8(1));
+    
+    % Lat bit
+    c_hat(flip) = bitxor(c_hat(flip), 1, 'uint8');
 end
 end

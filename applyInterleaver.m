@@ -1,5 +1,4 @@
 function interleaved = applyInterleaver(data, config)
-% APPLYINTERLEAVER - Block interleaving
 
 block_size = config.block_size;
 num_blocks = ceil(numel(data) / block_size);
@@ -16,4 +15,3 @@ for i = 1:num_blocks
         config.interleaver_rows, config.interleaver_cols);
 end
 end
-
